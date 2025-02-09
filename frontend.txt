@@ -1,0 +1,319 @@
+# Configuration Frontend pour le Backend Django
+
+## Configuration de l'environnement
+Créer un fichier `.env.local` à la racine du projet Next.js avec :
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000/api
+NEXT_PUBLIC_MEDIA_URL=http://localhost:8000/media
+```
+
+## Installation des dépendances
+```bash
+npm install axios @tanstack/react-query @stripe/stripe-js formik yup react-hot-toast
+```
+
+## Configuration Axios
+Créer un fichier `src/lib/axios.ts` :
+```typescript
+import axios from 'axios';
+import { toast } from 'react-hot-toast';
+
+const api = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+});
+
+// Intercepteur pour ajouter le token JWT
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Intercepteur pour gérer les erreurs
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = error.response?.data?.message || 'Une erreur est survenue';
+    toast.error(message);
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+```
+
+## Types pour TypeScript
+Créer un fichier `src/types/api.ts` :
+```typescript
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_admin: boolean;
+}
+
+export interface Profile {
+  id: number;
+  user: User;
+  phone: string;
+  address: string;
+  newsletter: boolean;
+  created_at: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  description: string;
+  image: string;
+  slug: string;
+  is_active: boolean;
+  product_count: number;
+}
+
+export interface ProductImage {
+  id: number;
+  image: string;
+  alt_text: string;
+  order: number;
+}
+
+export interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  category: Category;
+  stock: number;
+  thumbnail: string;
+  image: string;
+  additional_images: ProductImage[];
+  ingredients: string;
+  usage_instructions: string;
+  weight: string;
+  is_active: boolean;
+  is_featured: boolean;
+  slug: string;
+  discount_price: number | null;
+  average_rating: number | null;
+  review_count: number;
+  reviews: Review[];
+  is_in_stock: boolean;
+  created_at: string;
+}
+
+export interface Review {
+  id: number;
+  user: User;
+  rating: number;
+  comment: string;
+  is_verified_purchase: boolean;
+  created_at: string;
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  description: string;
+  discount_percent: number;
+  minimum_amount: number;
+  valid_from: string;
+  valid_to: string;
+  is_active: boolean;
+}
+
+export interface Order {
+  id: number;
+  user: User;
+  status: string;
+  status_display: string;
+  payment_status: string;
+  total_amount: number;
+  shipping_address: string;
+  billing_address: string;
+  phone: string;
+  email: string;
+  tracking_number: string;
+  notes: string;
+  coupon: Coupon | null;
+  discount_amount: number;
+  shipping_cost: number;
+  items: OrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrderItem {
+  id: number;
+  product: Product;
+  quantity: number;
+  price: number;
+}
+
+export interface Wishlist {
+  id: number;
+  products: Product[];
+  created_at: string;
+}
+
+export interface DashboardStats {
+  total_orders: number;
+  recent_orders: number;
+  total_revenue: number;
+  recent_revenue: number;
+  total_customers: number;
+  low_stock_products: number;
+  top_products: Product[];
+  orders_by_status: Array<{
+    status: string;
+    count: number;
+  }>;
+}
+
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+```
+
+## Endpoints API
+
+### Authentification
+- Login: POST `/api/token/`
+- Refresh Token: POST `/api/token/refresh/`
+- Register: POST `/api/users/register/`
+- Get Current User: GET `/api/users/me/`
+
+### Profil
+- Get Profile: GET `/api/profiles/me/`
+- Update Profile: PUT `/api/profiles/me/`
+
+### Produits
+- Liste: GET `/api/products/`
+- Détail: GET `/api/products/{id}/`
+- Par Slug: GET `/api/products/by-slug/{slug}/`
+- Produits en Vedette: GET `/api/products/featured/`
+- Ajouter Review: POST `/api/products/{id}/review/`
+- Produits Similaires: GET `/api/products/{id}/similar/`
+
+### Catégories
+- Liste: GET `/api/categories/`
+- Détail: GET `/api/categories/{id}/`
+- Par Slug: GET `/api/categories/by-slug/{slug}/`
+
+### Wishlist
+- Get Wishlist: GET `/api/wishlist/`
+- Add Product: POST `/api/wishlist/add/{product_id}/`
+- Remove Product: DELETE `/api/wishlist/remove/{product_id}/`
+
+### Commandes
+- Liste: GET `/api/orders/`
+- Détail: GET `/api/orders/{id}/`
+- Créer: POST `/api/orders/`
+- Mettre à jour statut: POST `/api/orders/{id}/update_status/`
+- Annuler: POST `/api/orders/{id}/cancel/`
+
+### Coupons
+- Vérifier: POST `/api/coupons/verify/`
+- Appliquer: POST `/api/coupons/apply/`
+
+### Newsletter
+- Subscribe: POST `/api/newsletter/subscribe/`
+- Unsubscribe: POST `/api/newsletter/unsubscribe/`
+
+### Dashboard Admin
+- Statistiques: GET `/api/orders/dashboard_stats/`
+- Produits en stock faible: GET `/api/products/low_stock/`
+- Commandes récentes: GET `/api/orders/recent/`
+- Meilleurs clients: GET `/api/users/top-customers/`
+
+## Utilitaires
+
+### Gestion des images
+```typescript
+const getImageUrl = (path: string) => {
+  return path ? `${process.env.NEXT_PUBLIC_MEDIA_URL}${path}` : '';
+};
+```
+
+### Format des prix
+```typescript
+export const formatPrice = (price: number) => {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(price);
+};
+```
+
+### Gestion du panier
+```typescript
+export interface CartItem {
+  product: Product;
+  quantity: number;
+}
+
+export const useCart = create<{
+  items: CartItem[];
+  addItem: (product: Product, quantity: number) => void;
+  removeItem: (productId: number) => void;
+  updateQuantity: (productId: number, quantity: number) => void;
+  clearCart: () => void;
+  total: number;
+}>((set, get) => ({
+  items: [],
+  addItem: (product, quantity) => {
+    set((state) => {
+      const existingItem = state.items.find(
+        (item) => item.product.id === product.id
+      );
+      if (existingItem) {
+        return {
+          items: state.items.map((item) =>
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + quantity }
+              : item
+          ),
+        };
+      }
+      return { items: [...state.items, { product, quantity }] };
+    });
+  },
+  removeItem: (productId) => {
+    set((state) => ({
+      items: state.items.filter((item) => item.product.id !== productId),
+    }));
+  },
+  updateQuantity: (productId, quantity) => {
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.product.id === productId ? { ...item, quantity } : item
+      ),
+    }));
+  },
+  clearCart: () => set({ items: [] }),
+  total: 0,
+}));
+```
+
+## Filtres et Recherche
+Les endpoints supportent les paramètres suivants :
+- `search`: Recherche textuelle
+- `category`: ID de la catégorie
+- `min_price`: Prix minimum
+- `max_price`: Prix maximum
+- `ordering`: Tri (-created_at, price, -price, name)
+- `is_featured`: Produits en vedette
+- `in_stock`: Produits en stock
+
+## Pagination
+Les endpoints supportent la pagination avec :
+- `page`: numéro de page
+- `page_size`: nombre d'éléments par page (défaut: 10)
